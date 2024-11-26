@@ -8,5 +8,7 @@ c = conn.cursor()
 
 c.execute('''UPDATE instructors SET isAdmin = 1 WHERE email = "arhea2@murraystate.edu"''')
 
+c.execute('''INSERT INTO grades (enrollment_id, grade) VALUES (1, 100)''')
+
 conn.commit()
 conn.close()

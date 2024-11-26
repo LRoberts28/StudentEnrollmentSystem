@@ -298,6 +298,9 @@ class StudentEnrollmentApp:
                     course_id = course[0]
                     try:
                         c.execute("INSERT INTO enrollments (student_id, course_id) VALUES (?, ?)", (student_id, course_id))
+                        c.execute("SELECT enrollment_id FROM enrollments WHERE student_id = ? AND course_id = ?", (student_id, course_id))
+                        enrollment_id = c.fetchone()
+                        c.execute("INSERT INTO grades (enrollment_id, grade) VALUES (?, ?)", (enrollment_id[0], 0))
                         conn.commit()
                         messagebox.showinfo("Success", "Successfully registered for the course.")
                         reload_courses()  # Reload the course list to show the newly added course
@@ -323,92 +326,138 @@ class StudentEnrollmentApp:
                         messagebox.showerror("Error", f"Error: {e}")
                     finally:
                         conn.close()
+                else:
+                    messagebox.showerror("Error", "Cannot find class")
 
     #-------------------------------------------------------------------------------------------------
 
     #Instructor View
     def instructor_dashboard(self, instructor_id):
-        instructor_window = Toplevel(self.root)
-        instructor_window.title("Instructor Dashboard")
-        instructor_window.geometry("400x300")
-        Label(instructor_window, text="Instructor Dashboard", font=("Arial", 16)).pack(pady=20)
-
-        Button(instructor_window, text="Manage Enrollments", command=lambda: view_enrollments()).pack(pady=10)
-        Button(instructor_window, text="Submit Grades", command=lambda: submit_grades()).pack(pady=10)
-
-        #View Enrollments
-
-        def view_enrollments():
-            enroll_window = Toplevel(self.root)
-            enroll_window.title("Enrollments")
-            enroll_window.geometry("400x300")
+    # Function to create the instructor dashboard window
+        def create_instructor_window():
+            # Create a new window (recreates every time the function is called)
+            instructor_window = Toplevel(self.root)
+            instructor_window.title("Instructor Dashboard")
+            instructor_window.geometry("400x600")
+            Label(instructor_window, text="Instructor Dashboard", font=("Arial", 16)).pack(pady=20)
 
             # Connect to the database and fetch the enrollment data
             conn = sqlite3.connect("university.db")
             c = conn.cursor()
 
-            c.execute('''
-                      SELECT c.course_name, s.first_name || ' ' || s.last_name AS student_name, g.grade
-                      FROM students s
-                      JOIN enrollments e ON s.student_id = e.student_id
-                      JOIN courses c ON e.course_id = c.course_id
-                      JOIN grades g ON e.enrollment_id = g.enrollment_id
-                      WHERE c.instructor_id = ?
-                      ''', (instructor_id,))
+            c.execute('''SELECT c.course_name, s.first_name || ' ' || s.last_name AS student_name, g.grade, e.enrollment_id
+                        FROM students s
+                        JOIN enrollments e ON s.student_id = e.student_id
+                        JOIN courses c ON e.course_id = c.course_id
+                        JOIN grades g ON e.enrollment_id = g.enrollment_id
+                        WHERE c.instructor_id = ?''', (instructor_id,))
             enrollments = c.fetchall()
             conn.close()
 
             # Create a Label for the title of the window
-            Label(enroll_window, text="Enrollments", font=("Arial", 14)).pack(pady=10)
+            Label(instructor_window, text="Enrollments", font=("Arial", 14)).pack(pady=10)
 
             # Create a Listbox to display enrollments
-            listbox = Listbox(enroll_window, width=50, height=10, selectmode=SINGLE)
+            listbox = Listbox(instructor_window, width=50, height=10, selectmode=SINGLE)
             listbox.pack(padx=10, pady=10)
 
             # Add a scrollbar for the listbox if the list is long
-            scrollbar = Scrollbar(enroll_window, orient=VERTICAL, command=listbox.yview)
+            scrollbar = Scrollbar(instructor_window, orient=VERTICAL, command=listbox.yview)
             scrollbar.pack(side=RIGHT, fill=Y)
             listbox.config(yscrollcommand=scrollbar.set)
 
             # Insert the enrollments into the Listbox
             for enrollment in enrollments:
-                listbox.insert('end', f"{enrollment[0]} - {enrollment[1]}")
+                listbox.insert('end', f"{enrollment[0]} - {enrollment[1]} - {enrollment[2]}")
 
+            # Create a Label and Entry widget to edit grades
+            grade_label = Label(instructor_window, text="Grade:")
+            grade_label.pack(pady=5)
+            grade_entry = Entry(instructor_window, width=20)
+            grade_entry.pack(pady=5)
 
+            # Update grade function
+            def update_grade():
+                selected_index = listbox.curselection()
+                if not selected_index:
+                    return
 
-        #Submit Grades
+                selected_enrollment = enrollments[selected_index[0]]
+                enrollment_id = selected_enrollment[3]
+                new_grade = grade_entry.get()
 
-        def submit_grades(self):
-            grade_window = Toplevel(self.root)
-            grade_window.title("Submit Grades")
-            grade_window.geometry("300x300")
-    
-            Label(grade_window, text="Enrollment ID:").grid(row=0, column=0, padx=10, pady=10)
-            enroll_id_entry = Entry(grade_window)
-            enroll_id_entry.grid(row=0, column=1, padx=10, pady=10)
-    
-            Label(grade_window, text="Grade:").grid(row=1, column=0, padx=10, pady=10)
-            grade_entry = Entry(grade_window)
-            grade_entry.grid(row=1, column=1, padx=10, pady=10)
-    
-            Button(
-                grade_window, 
-                text="Submit", 
-                command=lambda: save_grade(enroll_id_entry.get(), grade_entry.get(), grade_window)
-            ).grid(row=2, column=0, columnspan=2, pady=10)
-
-        def save_grade(self, enrollment_id, grade, window):
-            conn = sqlite3.connect("university.db")
-            c = conn.cursor()
-            try:
-                c.execute("INSERT INTO grades (enrollment_id, grade) VALUES (?, ?)", (enrollment_id, grade))
+                # Update the grade in the database
+                conn = sqlite3.connect("university.db")
+                c = conn.cursor()
+                c.execute('''UPDATE grades
+                            SET grade = ?
+                            WHERE enrollment_id = ?''', (new_grade, enrollment_id))
                 conn.commit()
-                messagebox.showinfo("Success", "Grade submitted successfully.")
-            except sqlite3.Error as e:
-                messagebox.showerror("Error", f"Error: {e}")
-            finally:
                 conn.close()
-                window.destroy()
+
+                # Refresh the list of enrollments
+                refresh_enrollments()
+
+            # Refresh the listbox with updated enrollment data
+            def refresh_enrollments():
+                # Clear the listbox
+                listbox.delete(0, 'end')
+
+                # Re-fetch the updated enrollment data
+                conn = sqlite3.connect("university.db")
+                c = conn.cursor()
+                c.execute('''SELECT c.course_name, s.first_name || ' ' || s.last_name AS student_name, g.grade, e.enrollment_id
+                            FROM students s
+                            JOIN enrollments e ON s.student_id = e.student_id
+                            JOIN courses c ON e.course_id = c.course_id
+                            JOIN grades g ON e.enrollment_id = g.enrollment_id
+                            WHERE c.instructor_id = ?''', (instructor_id,))
+                enrollments = c.fetchall()
+                conn.close()
+
+                # Insert updated enrollments into the Listbox
+                for enrollment in enrollments:
+                    listbox.insert('end', f"{enrollment[0]} - {enrollment[1]}")
+
+            # Create a Submit button to submit the updated grade
+            submit_button = Button(instructor_window, text="Submit Grade", command=update_grade)
+            submit_button.pack(pady=10)
+
+            # Allow deletion of a grade if needed
+            def delete_grade():
+                selected_index = listbox.curselection()
+                if not selected_index:
+                    return
+
+                selected_enrollment = enrollments[selected_index[0]]
+                enrollment_id = selected_enrollment[3]
+
+                # Delete the grade from the database
+                conn = sqlite3.connect("university.db")
+                c = conn.cursor()
+                c.execute('''DELETE FROM grades
+                            WHERE enrollment_id = ?''', (enrollment_id,))
+                conn.commit()
+                conn.close()
+
+                # Refresh the list of enrollments
+                refresh_enrollments()
+
+            # Create a Delete button to delete the grade
+            delete_button = Button(instructor_window, text="Delete Grade", command=delete_grade)
+            delete_button.pack(pady=5)
+
+            # Create a Refresh button to close and reopen the instructor window
+            def refresh_button_click():
+                instructor_window.destroy()  # Close the current window
+                create_instructor_window()  # Recreate the window to refresh content
+
+            # Create a Refresh button
+            refresh_button = Button(instructor_window, text="Refresh", command=refresh_button_click)
+            refresh_button.pack(pady=10)
+
+        # Initially create the instructor window
+        create_instructor_window()
 
     #-------------------------------------------------------------------------------------------------
 
