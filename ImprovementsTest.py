@@ -1,7 +1,10 @@
 import sqlite3
-import bcrypt
 from tkinter import *
 from tkinter import messagebox
+from argon2 import PasswordHasher
+
+# Initialize Argon2 password hasher
+ph = PasswordHasher()
 
 def create_db():
     conn = sqlite3.connect('university.db')
@@ -28,8 +31,7 @@ def create_db():
                     first_name TEXT,
                     last_name TEXT,
                     email TEXT,
-                    password TEXT,
-                    isAdmin INT
+                    password TEXT
                   )''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS departments (
@@ -58,7 +60,6 @@ def create_db():
 create_db()  # Call this function to create the database
 
 class StudentEnrollmentApp:
-    # Setup of login page
     def __init__(self, root):
         self.root = root
         self.root.title("Student Enrollment System")
@@ -92,87 +93,93 @@ class StudentEnrollmentApp:
         password_entry = Entry(login_window, show="*")
         password_entry.pack(pady=5)
 
-        Button(login_window, text="Login", command=lambda: authenticate(email_entry.get(), password_entry.get())).pack(pady=10)
-        Button(login_window, text="Create Account", command=lambda: create_account_window(), width=20).pack(pady=5)
+        Button(login_window, text="Login", command=lambda: self.authenticate(user_type, email_entry.get(), password_entry.get())).pack(pady=10)
+        Button(login_window, text="Create Account", command=lambda: self.create_account_window(user_type), width=20).pack(pady=5)
 
-        def authenticate(email, password):
-            conn = sqlite3.connect("university.db")
-            c = conn.cursor()
+    def authenticate(self, user_type, email, password):
+        conn = sqlite3.connect("university.db")
+        c = conn.cursor()
 
-            if user_type == "Student":
-                c.execute("SELECT * FROM students WHERE email = ?", (email,))
-            else: #Instructor or Admin
-                c.execute("SELECT * FROM instructors WHERE email = ?", (email,))
+        if user_type == "Student":
+            c.execute("SELECT * FROM students WHERE email = ?", (email,))
+        elif user_type == "Instructor":
+            c.execute("SELECT * FROM instructors WHERE email = ?", (email,))
+        else:  # Admin
+            c.execute("SELECT * FROM instructors WHERE email = ?", (email,))
 
-            user = c.fetchone() #is the email in our database?
-            conn.close()
+        user = c.fetchone()
+        conn.close()
 
-            if user and bcrypt.checkpw(password.encode('utf-8'), user[4].encode('utf-8')):  # user[4] is password column
-                messagebox.showinfo("Login Success", f"Welcome, {user_type}!")
-
-                if user_type == "Student":
-                    self.student_dashboard(user[0])  # Pass student_id
-                elif user_type == "Instructor":
-                    self.instructor_dashboard(user[0])  # Pass instructor_id
-                elif user_type == "Admin" and user[5] == 1:
-                    self.admin_dashboard()
-
-                login_window.destroy()
-            else:
-                messagebox.showerror("Login Failed", "Invalid credentials. Try again.")
-
-        def create_account_window():
-            create_window = Toplevel(self.root)
-            create_window.title(f"Create {user_type} Account")
-            create_window.geometry("300x300")
-
-            Label(create_window, text="First Name:").pack(pady=5)
-            first_name_entry = Entry(create_window)
-            first_name_entry.pack(pady=5)
-
-            Label(create_window, text="Last Name:").pack(pady=5)
-            last_name_entry = Entry(create_window)
-            last_name_entry.pack(pady=5)
-
-            Label(create_window, text="Email:").pack(pady=5)
-            email_entry = Entry(create_window)
-            email_entry.pack(pady=5)
-
-            Label(create_window, text="Password:").pack(pady=5)
-            password_entry = Entry(create_window, show="*")
-            password_entry.pack(pady=5)
-
-            Label(create_window, text="Confirm Password:").pack(pady=5)
-            confirm_password_entry = Entry(create_window, show="*")
-            confirm_password_entry.pack(pady=5)
-
-            Button(create_window, text="Create Account", 
-                   command=lambda: create_account(first_name_entry.get(), last_name_entry.get(), email_entry.get(), password_entry.get(), confirm_password_entry.get(), create_window)).pack(pady=10)
-
-        def create_account(first_name, last_name, email, password, confirm_password, window):
-            if password != confirm_password:
-                messagebox.showerror("Error", "Passwords do not match.")
-                return
-
-            hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-            conn = sqlite3.connect("university.db")
-            c = conn.cursor()
-
+        if user:
             try:
+                # Verify password using Argon2
+                ph.verify(user[4], password)  # user[4] is the password column
+                messagebox.showinfo("Login Success", f"Welcome, {user_type}!")
                 if user_type == "Student":
-                    c.execute("INSERT INTO students (first_name, last_name, email, password) VALUES (?, ?, ?, ?)", 
-                              (first_name, last_name, email, hashed_password))
+                    self.student_dashboard()
                 elif user_type == "Instructor":
-                    c.execute("INSERT INTO instructors (first_name, last_name, email, password) VALUES (?, ?, ?, ?)", 
-                              (first_name, last_name, email, hashed_password))
-                conn.commit()
-                messagebox.showinfo("Account Created", f"{user_type} account created successfully!")
-                window.destroy()  # Close the create account window
-            except sqlite3.Error as e:
-                messagebox.showerror("Error", f"Error: {e}")
-            finally:
-                conn.close()
+                    self.instructor_dashboard()
+                else:
+                    self.admin_dashboard()
+            except Exception as e:
+                messagebox.showerror("Login Failed", "Invalid credentials. Try again.")
+        else:
+            messagebox.showerror("Login Failed", "Invalid credentials. Try again.")
+
+    def create_account_window(self, user_type):
+        create_window = Toplevel(self.root)
+        create_window.title(f"Create {user_type} Account")
+        create_window.geometry("300x300")
+
+        Label(create_window, text="First Name:").pack(pady=5)
+        first_name_entry = Entry(create_window)
+        first_name_entry.pack(pady=5)
+
+        Label(create_window, text="Last Name:").pack(pady=5)
+        last_name_entry = Entry(create_window)
+        last_name_entry.pack(pady=5)
+
+        Label(create_window, text="Email:").pack(pady=5)
+        email_entry = Entry(create_window)
+        email_entry.pack(pady=5)
+
+        Label(create_window, text="Password:").pack(pady=5)
+        password_entry = Entry(create_window, show="*")
+        password_entry.pack(pady=5)
+
+        Label(create_window, text="Confirm Password:").pack(pady=5)
+        confirm_password_entry = Entry(create_window, show="*")
+        confirm_password_entry.pack(pady=5)
+
+        Button(create_window, text="Create Account", 
+               command=lambda: self.create_account(user_type, first_name_entry.get(), last_name_entry.get(), 
+                                                    email_entry.get(), password_entry.get(), confirm_password_entry.get(), create_window)).pack(pady=10)
+
+    def create_account(self, user_type, first_name, last_name, email, password, confirm_password, window):
+        if password != confirm_password:
+            messagebox.showerror("Error", "Passwords do not match.")
+            return
+
+        # Hash password with Argon2
+        hashed_password = ph.hash(password)
+
+        conn = sqlite3.connect("university.db")
+        c = conn.cursor()
+
+        try:
+            if user_type == "Student":
+                c.execute("INSERT INTO students (first_name, last_name, email, password) VALUES (?, ?, ?, ?)", 
+                          (first_name, last_name, email, hashed_password))
+            elif user_type == "Instructor":
+                c.execute("INSERT INTO instructors (first_name, last_name, email, password) VALUES (?, ?, ?, ?)", 
+                          (first_name, last_name, email, hashed_password))
+            conn.commit()
+            messagebox.showinfo("Account Created", f"{user_type} account created successfully!")
+            window.destroy()  # Close the create account window
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error: {e}")
+        finally:
+            conn.close()
     
     #-------------------------------------------------------------------------------------------------
 
