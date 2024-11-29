@@ -1,7 +1,10 @@
 import sqlite3
-import bcrypt
 from tkinter import *
 from tkinter import messagebox
+from argon2 import PasswordHasher
+
+# Initialize Argon2 password hasher
+ph = PasswordHasher()
 
 def create_db():
     conn = sqlite3.connect('university.db')
@@ -107,14 +110,19 @@ class StudentEnrollmentApp:
         user = c.fetchone()
         conn.close()
 
-        if user and bcrypt.checkpw(password.encode('utf-8'), user[4].encode('utf-8')):  # user[4] is password column
-            messagebox.showinfo("Login Success", f"Welcome, {user_type}!")
-            if user_type == "Student":
-                self.student_dashboard()
-            elif user_type == "Instructor":
-                self.instructor_dashboard()
-            else:
-                self.admin_dashboard()
+        if user:
+            try:
+                # Verify password using Argon2
+                ph.verify(user[4], password)  # user[4] is the password column
+                messagebox.showinfo("Login Success", f"Welcome, {user_type}!")
+                if user_type == "Student":
+                    self.student_dashboard()
+                elif user_type == "Instructor":
+                    self.instructor_dashboard()
+                else:
+                    self.admin_dashboard()
+            except Exception as e:
+                messagebox.showerror("Login Failed", "Invalid credentials. Try again.")
         else:
             messagebox.showerror("Login Failed", "Invalid credentials. Try again.")
 
@@ -152,7 +160,8 @@ class StudentEnrollmentApp:
             messagebox.showerror("Error", "Passwords do not match.")
             return
 
-        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        # Hash password with Argon2
+        hashed_password = ph.hash(password)
 
         conn = sqlite3.connect("university.db")
         c = conn.cursor()
