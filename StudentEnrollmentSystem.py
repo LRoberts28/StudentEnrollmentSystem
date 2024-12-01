@@ -241,6 +241,140 @@ class StudentEnrollmentApp:
         Button(instructor_window, text="Update Instructor", command=self.update_instructor).pack(pady=5)
         Button(instructor_window, text="Delete Instructor", command=self.delete_instructor).pack(pady=5)
 
+    def add_instructor(self):
+        add_window = Toplevel(self.root)
+        add_window.title("Add Instructor")
+        add_window.geometry("300x300")
+
+        Label(add_window, text="First Name:").pack(pady=5)
+        first_name_entry = Entry(add_window)
+        first_name_entry.pack(pady=5)
+
+        Label(add_window, text="Last Name:").pack(pady=5)
+        last_name_entry = Entry(add_window)
+        last_name_entry.pack(pady=5)
+
+        Label(add_window, text="Email:").pack(pady=5)
+        email_entry = Entry(add_window)
+        email_entry.pack(pady=5)
+
+        Label(add_window, text="Password:").pack(pady=5)
+        password_entry = Entry(add_window, show="*")
+        password_entry.pack(pady=5)
+
+        Button(add_window, text="Add Instructor", 
+            command=lambda: self.save_instructor(first_name_entry.get(), last_name_entry.get(), email_entry.get(), password_entry.get(), add_window)).pack(pady=10)
+
+    def save_instructor(self, first_name, last_name, email, password, window):
+        if not all([first_name, last_name, email, password]):
+            messagebox.showerror("Error", "All fields are required.")
+            return
+
+        hashed_password = ph.hash(password)  # Hash the password
+
+        conn = sqlite3.connect("university.db")
+        c = conn.cursor()
+
+        try:
+            c.execute("INSERT INTO instructors (first_name, last_name, email, password) VALUES (?, ?, ?, ?)", 
+                    (first_name, last_name, email, hashed_password))
+            conn.commit()
+            messagebox.showinfo("Success", "Instructor added successfully!")
+            window.destroy()  # Close the add window
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error adding instructor: {e}")
+        finally:
+            conn.close()
+
+    def update_instructor(self):
+        update_window = Toplevel(self.root)
+        update_window.title("Update Instructor")
+        update_window.geometry("300x300")
+
+        Label(update_window, text="Instructor ID:").pack(pady=5)
+        instructor_id_entry = Entry(update_window)
+        instructor_id_entry.pack(pady=5)
+
+        Label(update_window, text="New First Name:").pack(pady=5)
+        first_name_entry = Entry(update_window)
+        first_name_entry.pack(pady=5)
+
+        Label(update_window, text="New Last Name:").pack(pady=5)
+        last_name_entry = Entry(update_window)
+        last_name_entry.pack(pady=5)
+
+        Label(update_window, text="New Email:").pack(pady=5)
+        email_entry = Entry(update_window)
+        email_entry.pack(pady=5)
+
+        Button(update_window, text="Update Instructor", 
+            command=lambda: self.save_updated_instructor(instructor_id_entry.get(), first_name_entry.get(), last_name_entry.get(), email_entry.get(), update_window)).pack(pady=10)
+
+    def save_updated_instructor(self, instructor_id, first_name, last_name, email, window):
+        if not instructor_id:
+            messagebox.showerror("Error", "Instructor ID is required.")
+            return
+
+        conn = sqlite3.connect("university.db")
+        c = conn.cursor()
+
+        try:
+            c.execute("SELECT * FROM instructors WHERE instructor_id = ?", (instructor_id,))
+            if not c.fetchone():
+                messagebox.showerror("Error", f"No instructor found with ID {instructor_id}.")
+                return
+
+            # Update the instructor's information
+            c.execute("""UPDATE instructors 
+                        SET first_name = COALESCE(?, first_name), 
+                            last_name = COALESCE(?, last_name), 
+                            email = COALESCE(?, email) 
+                        WHERE instructor_id = ?""",
+                    (first_name or None, last_name or None, email or None, instructor_id))
+            conn.commit()
+            messagebox.showinfo("Success", "Instructor updated successfully!")
+            window.destroy()  # Close the update window
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error updating instructor: {e}")
+        finally:
+            conn.close()
+
+    def delete_instructor(self):
+        delete_window = Toplevel(self.root)
+        delete_window.title("Delete Instructor")
+        delete_window.geometry("300x150")
+
+        Label(delete_window, text="Instructor ID:").pack(pady=5)
+        instructor_id_entry = Entry(delete_window)
+        instructor_id_entry.pack(pady=5)
+
+        Button(delete_window, text="Delete Instructor", 
+            command=lambda: self.remove_instructor(instructor_id_entry.get(), delete_window)).pack(pady=10)
+
+    def remove_instructor(self, instructor_id, window):
+        if not instructor_id:
+            messagebox.showerror("Error", "Instructor ID is required.")
+            return
+
+        conn = sqlite3.connect("university.db")
+        c = conn.cursor()
+
+        try:
+            c.execute("SELECT * FROM instructors WHERE instructor_id = ?", (instructor_id,))
+            if not c.fetchone():
+                messagebox.showerror("Error", f"No instructor found with ID {instructor_id}.")
+                return
+
+            # Delete the instructor
+            c.execute("DELETE FROM instructors WHERE instructor_id = ?", (instructor_id,))
+            conn.commit()
+            messagebox.showinfo("Success", "Instructor deleted successfully!")
+            window.destroy()  # Close the delete window
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error deleting instructor: {e}")
+        finally:
+            conn.close()
+
     def manage_departments(self):
         department_window = Toplevel(self.root)
         department_window.title("Manage Departments")
@@ -251,6 +385,115 @@ class StudentEnrollmentApp:
         Button(department_window, text="Add Department", command=self.add_department).pack(pady=5)
         Button(department_window, text="Update Department", command=self.update_department).pack(pady=5)
         Button(department_window, text="Delete Department", command=self.delete_department).pack(pady=5)
+
+    def add_department(self):
+        add_window = Toplevel(self.root)
+        add_window.title("Add Department")
+        add_window.geometry("300x200")
+
+        Label(add_window, text="Department Name:").pack(pady=5)
+        department_name_entry = Entry(add_window)
+        department_name_entry.pack(pady=5)
+
+        Button(add_window, text="Add Department", 
+            command=lambda: self.save_department(department_name_entry.get(), add_window)).pack(pady=10)
+
+    def save_department(self, department_name, window):
+        if not department_name:
+            messagebox.showerror("Error", "Department name is required.")
+            return
+
+        conn = sqlite3.connect("university.db")
+        c = conn.cursor()
+
+        try:
+            c.execute("INSERT INTO departments (department_name) VALUES (?)", (department_name,))
+            conn.commit()
+            messagebox.showinfo("Success", "Department added successfully!")
+            window.destroy()  # Close the add window
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error adding department: {e}")
+        finally:
+            conn
+
+    def update_department(self):
+        update_window = Toplevel(self.root)
+        update_window.title("Update Department")
+        update_window.geometry("300x200")
+
+        Label(update_window, text="Department ID:").pack(pady=5)
+        department_id_entry = Entry(update_window)
+        department_id_entry.pack(pady=5)
+
+        Label(update_window, text="New Department Name:").pack(pady=5)
+        department_name_entry = Entry(update_window)
+        department_name_entry.pack(pady=5)
+
+        Button(update_window, text="Update Department", 
+            command=lambda: self.save_updated_department(department_id_entry.get(), department_name_entry.get(), update_window)).pack(pady=10)
+
+    def save_updated_department(self, department_id, department_name, window):
+        if not department_id or not department_name:
+            messagebox.showerror("Error", "Both Department ID and new name are required.")
+            return
+
+        conn = sqlite3.connect("university.db")
+        c = conn.cursor()
+
+        try:
+            # Check if the department exists
+            c.execute("SELECT * FROM departments WHERE department_id = ?", (department_id,))
+            result = c.fetchone()
+            if not result:
+                messagebox.showerror("Error", f"No department found with ID {department_id}.")
+                return
+
+            # Update the department name
+            c.execute("UPDATE departments SET department_name = ? WHERE department_id = ?", (department_name, department_id))
+            conn.commit()
+            messagebox.showinfo("Success", "Department updated successfully!")
+            window.destroy()  # Close the update window
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error updating department: {e}")
+        finally:
+            conn.close()
+
+
+    def delete_department(self):
+        delete_window = Toplevel(self.root)
+        delete_window.title("Delete Department")
+        delete_window.geometry("300x150")
+
+        Label(delete_window, text="Department ID:").pack(pady=5)
+        department_id_entry = Entry(delete_window)
+        department_id_entry.pack(pady=5)
+
+        Button(delete_window, text="Delete Department", 
+            command=lambda: self.remove_department(department_id_entry.get(), delete_window)).pack(pady=10)
+
+    def remove_department(self, department_id, window):
+        if not department_id:
+            messagebox.showerror("Error", "Department ID is required.")
+            return
+
+        conn = sqlite3.connect("university.db")
+        c = conn.cursor()
+
+        try:
+            c.execute("SELECT * FROM departments WHERE department_id = ?", (department_id,))
+            if not c.fetchone():
+                messagebox.showerror("Error", f"No department found with ID {department_id}.")
+                return
+
+            c.execute("DELETE FROM departments WHERE department_id = ?", (department_id,))
+            conn.commit()
+            messagebox.showinfo("Success", "Department deleted successfully!")
+            window.destroy()  # Close the delete window
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error deleting department: {e}")
+        finally:
+            conn.close()
+
 
     def add_course(self):
         add_window = Toplevel(self.root)
