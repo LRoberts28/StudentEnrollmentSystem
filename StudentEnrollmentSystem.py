@@ -54,14 +54,6 @@ def create_db():
                     FOREIGN KEY(enrollment_id) REFERENCES enrollments(enrollment_id)
                   )''')
     
-    c.execute('''CREATE TABLE IF NOT EXISTS admin_users (
-                    admin_id INTEGER PRIMARY KEY,
-                    first_name TEXT,
-                    last_name TEXT,
-                    email TEXT UNIQUE,
-                    password TEXT
-                  )''')
-    
     conn.commit()
     conn.close()
 
