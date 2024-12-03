@@ -61,7 +61,7 @@ def create_db():
                     email TEXT UNIQUE,
                     password TEXT
                   )''')
-    
+
     conn.commit()
     conn.close()
 
@@ -108,31 +108,53 @@ class StudentEnrollmentApp:
         conn = sqlite3.connect("university.db")
         c = conn.cursor()
 
+        # Determine which table to query based on user type
+        query = None
         if user_type == "Student":
-            c.execute("SELECT * FROM students WHERE email = ?", (email,))
+            query = "SELECT student_id, * FROM students WHERE email = ?"
         elif user_type == "Instructor":
-            c.execute("SELECT * FROM instructors WHERE email = ?", (email,))
-        else:  # Admin
-            c.execute("SELECT * FROM admin_users WHERE email = ?", (email,))
-
-        user = c.fetchone()
-        conn.close()
-
-        if user:
-            try:
-                # Verify password using Argon2
-                ph.verify(user[4], password)  # user[4] is the password column
-                messagebox.showinfo("Login Success", f"Welcome, {user_type}!")
-                if user_type == "Student":
-                    self.student_dashboard()
-                elif user_type == "Instructor":
-                    self.instructor_dashboard()
-                else:
-                    self.admin_dashboard()
-            except Exception:
-                messagebox.showerror("Login Failed", "Invalid credentials. Try again.")
+            query = "SELECT instructor_id, * FROM instructors WHERE email = ?"
+        elif user_type == "Admin":
+            query = """
+                SELECT instructors.instructor_id, instructors.*
+                FROM instructors
+                INNER JOIN admins ON instructors.instructor_id = admins.instructor_id
+                WHERE instructors.email = ?
+            """
         else:
-            messagebox.showerror("Login Failed", "Invalid credentials. Try again.")
+            messagebox.showerror("Error", "Invalid user type.")
+            return
+
+        try:
+            c.execute(query, (email,))
+            user = c.fetchone()
+
+            if user:
+                try:
+                    # Password verification
+                    stored_password = user[-1]  # Assuming password is the last column
+                    ph.verify(stored_password, password)
+
+                    # On successful authentication, open appropriate dashboard
+                    messagebox.showinfo("Login Success", f"Welcome, {user_type}!")
+                    if user_type == "Student":
+                        student_id = user[0]  # Assuming student_id is the first column
+                        self.student_dashboard(student_id)
+                    elif user_type == "Instructor":
+                        self.instructor_dashboard()
+                    else:
+                        self.admin_dashboard()
+                except Exception:
+                    messagebox.showerror("Login Failed", "Invalid credentials. Try again.")
+            else:
+                # User does not exist
+                messagebox.showerror("Login Failed", "Invalid credentials. Try again.")
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Database error: {e}")
+        finally:
+            conn.close()
+
+
 
 
     def create_account_window(self, user_type):
