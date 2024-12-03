@@ -114,15 +114,10 @@ class StudentEnrollmentApp:
             query = "SELECT student_id, * FROM students WHERE email = ?"
         elif user_type == "Instructor":
             query = "SELECT instructor_id, * FROM instructors WHERE email = ?"
-        elif user_type == "Admin":
-            query = """
-                SELECT instructors.instructor_id, instructors.*
-                FROM instructors
-                INNER JOIN admins ON instructors.instructor_id = admins.instructor_id
-                WHERE instructors.email = ?
-            """
+            #self.instructor_dashboard()
         else:
-            messagebox.showerror("Error", "Invalid user type.")
+            self.admin_dashboard()
+        #messagebox.showerror("Error", "Invalid user type.")
             return
 
         try:
@@ -141,7 +136,8 @@ class StudentEnrollmentApp:
                         student_id = user[0]  # Assuming student_id is the first column
                         self.student_dashboard(student_id)
                     elif user_type == "Instructor":
-                        self.instructor_dashboard()
+                        instructor_id = user[0]
+                        self.instructor_dashboard(instructor_id)
                     else:
                         self.admin_dashboard()
                 except Exception:
